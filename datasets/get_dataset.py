@@ -70,7 +70,7 @@ def get_FGADR_Seg_test(image_path, network, aug=False):
     return datasets, val_list
 
 
-def get_ODIR(dataset_path, input_size, batch_size):
+def get_ODIR(dataset_path, input_size, batch_size, split_index):
 
     dataset_csv = os.path.join(dataset_path, 'label_v3.csv')
     image_path_list = []
@@ -84,13 +84,31 @@ def get_ODIR(dataset_path, input_size, batch_size):
             image_label_list.append(row[1:])
         csvfile.close()
 
-    # data_dir = (dataset_path)
-    # train_csv = os.path.join(data_dir, 'train_%02d.csv' % split_index)
-    # test_csv = os.path.join(data_dir, 'test_%02d.csv' % split_index)
+    data_dir = (dataset_path)
+    train_csv = os.path.join(data_dir, 'train_%02d.csv' % split_index)
+    test_csv = os.path.join(data_dir, 'test_%02d.csv' % split_index)
 
-    val_size = 0.2
-    train_image_list, val_image_list, train_y_list, val_y_list  = \
-        train_test_split(image_path_list, image_label_list, test_size=val_size)
+    train_image_list = []
+    train_y_list = []
+    with open(train_csv) as csvfile:
+        csv_reader = csv.reader(csvfile)
+        for row in csv_reader:
+            train_image_list.append(image_path_list[int(row[0])])
+            train_y_list.append(image_label_list[int(row[0])])
+        csvfile.close()
+
+    val_image_list = []
+    val_y_list = []
+    with open(test_csv) as csvfile:
+        csv_reader = csv.reader(csvfile)
+        for row in csv_reader:
+            val_image_list.append(image_path_list[int(row[0])])
+            val_y_list.append(image_label_list[int(row[0])])
+        csvfile.close()
+
+    # val_size = 0.2
+    # train_image_list, val_image_list, train_y_list, val_y_list  = \
+    #     train_test_split(image_path_list, image_label_list, test_size=val_size)
 
     len_train_list = len(train_image_list)
     rem_train = len_train_list % batch_size

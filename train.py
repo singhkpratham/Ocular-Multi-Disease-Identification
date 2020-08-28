@@ -39,17 +39,17 @@ parser.add_argument('--input_size', default=512, type=int, help='the input size 
 parser.add_argument('--network', default='dense_unet', type=str, help='network architecture: 2D_unet, dense_unet')
 parser.add_argument('--global_pool', default='PCAM', type=str, help='global pooling method for CAM')
 parser.add_argument('--batch_size', default=64, type=int, help='training batch size')
-parser.add_argument('--base_lr', default=0.01, type=float, help='base learning rate for SGD optimizer')
+parser.add_argument('--base_lr', default=0.001, type=float, help='base learning rate for SGD optimizer')
 parser.add_argument('--optimizer', default='Adam', type=str, help='SGD / Adam')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum for SGD')
 parser.add_argument('--weight_decay', default=1e-4, type=float, help='weight_decay for SGD')
 parser.add_argument('--ckpt_dir', default='./save_models', type=str, help='ckpt path')
-parser.add_argument('--pretrain', default='', type=str, help='path to the pretrained model')
+parser.add_argument('--pretrain', default='pretrained/epoch-97-pr-0.553.pth.tar', type=str, help='path to the pretrained model')
 parser.add_argument('--num_epochs', default=300, type=int, help='training epochs')
 parser.add_argument('--gpu', default='0,1,2,3,4,5,6,7', type=str, help='Support one GPU & multiple GPUs')
 parser.add_argument('--n_classes', default=4, type=int, help='number of classes of source domain')
 parser.add_argument('--t_classes', default=8, type=int, help='number of classes of target domain')
-parser.add_argument('--class_idx', default=4, type=int, help='the index of class for training [0: ma, 1: ex, 2: se, 3: he, 4: all]')
+parser.add_argument('--class_idx', default=4, type=int, help='the index of class for training [0: ma, 1: ex, 2: se, 3: he, 4: all, 5: irma, 6: nv]')
 parser.add_argument('--augmentation', default=True, type=bool, help='whether to do data augmentation')
 parser.add_argument('--split_index', default=1, type=int, help='train_test_split index')
 args = parser.parse_args()
@@ -170,21 +170,21 @@ def train(data_loader_s, data_loader_t, class_weights_t, model, discriminator, e
         loss_g = criterion_adv(discriminator(feat_s, domain_label=0), valid)
 
         # Task loss + G loss
-        loss_output = loss_seg + loss_cls # + 0.5 * loss_g
+        loss_output = loss_seg + loss_cls + 0.5 * loss_g
 
         optimizer.zero_grad()
-        loss_output.backward()
-        # loss_output.backward(retain_graph=True)
+        # loss_output.backward()
+        loss_output.backward(retain_graph=True)
         optimizer.step()
 
         # Measure discriminator's ability to classify target domain data from source domain data
         loss_real = criterion_adv(discriminator(feat_t, domain_label=1), valid)
         loss_fake = criterion_adv(discriminator(feat_s, domain_label=0), fake)
-        loss_d = (loss_real + loss_fake) / 2 * 0.5
+        loss_d = (loss_real + loss_fake) / 2
 
-        # optimizer_D.zero_grad()
-        # loss_d.backward()
-        # optimizer_D.step()
+        optimizer_D.zero_grad()
+        loss_d.backward()
+        optimizer_D.step()
 
 
         # Evaluation during training - source domain
@@ -256,8 +256,6 @@ def train(data_loader_s, data_loader_t, class_weights_t, model, discriminator, e
 
 def val(data_loader_s, data_loader_t, class_weights_t, model, epoch):
     end = time.time()
-    # model.train()
-    model.train()
 
     # Metric values initiation
     metrics = []
@@ -399,7 +397,8 @@ def main(args):
         #   - For N > 2 classes, use n_classes=N
         model = UNet2D(n_channels=3, n_classes=args.n_classes, num_classes=args.num_classes, pool=args.global_pool, bilinear=True)
     elif args.network == 'dense_unet':
-        model = DenseUNet(n_channels=3, n_classes=args.n_classes, num_classes=args.num_classes, t_classes=args.t_classes, pool=args.global_pool, bilinear=True)
+        model = DenseUNet(n_channels=3, n_classes=args.n_classes, num_classes=args.num_classes,
+                          t_classes=args.t_classes, pool=args.global_pool, bilinear=True)
     else:
         print('TODO')
 
@@ -431,9 +430,11 @@ def main(args):
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=0.0005, betas=(0.5, 0.999))
 
     print('Setting up source domain data...')
-    dataset_s = get_FGADR_Seg(image_path=args.image_path_source, split_index=args.split_index, network=args.network, batch_size=args.batch_size,  aug=args.augmentation)
+    dataset_s = get_FGADR_Seg(image_path=args.image_path_source, split_index=args.split_index, network=args.network,
+                              batch_size=args.batch_size,  aug=args.augmentation)
     print('Setting up target domain data...')
-    trainset_t, valset_t, class_weights_t = get_ODIR(dataset_path=args.image_path_target, input_size=args.input_size, batch_size=args.batch_size)
+    trainset_t, valset_t, class_weights_t = get_ODIR(dataset_path=args.image_path_target, input_size=args.input_size,
+                                                     batch_size=args.batch_size, split_index=args.split_index)
 
     train_loader_s = data.DataLoader(dataset_s['train'], batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True)
     val_loader_s = data.DataLoader(dataset_s['val'], batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True)

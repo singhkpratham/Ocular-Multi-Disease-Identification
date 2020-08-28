@@ -36,7 +36,7 @@ class DenseUNet(nn.Module):
         # Source Domain Architecture
         # First convolution
         self.s_inc = nn.Sequential(OrderedDict([
-            ('conv0', nn.Conv2d(3, num_init_features, kernel_size=7, stride=2, padding=3, bias=False)),  # noqa
+            ('conv0', nn.Conv2d(self.n_channels, num_init_features, kernel_size=7, stride=2, padding=3, bias=False)),  # noqa
             ('norm0', get_norm(norm_type, num_init_features)),
             ('relu0', nn.ReLU(inplace=True)),
             ('pool0', nn.MaxPool2d(kernel_size=3, stride=2, padding=1)),
@@ -158,9 +158,6 @@ class DenseUNet(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.t_classifier = nn.Conv2d(num_features * 2, self.t_classes, kernel_size=1, stride=1, padding=0, bias=True)
 
-        # T - Linear layer
-        # self.classifier = nn.Linear(num_features, num_classes)
-        # self.num_features = num_features
 
         # Official init from torch repo.
         for m in self.modules():
@@ -177,6 +174,9 @@ class DenseUNet(nn.Module):
             elif isinstance(m, nn.InstanceNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+
+        # for p in self.parameters():
+        #     p.requires_grad = False
 
 
     def forward(self, x_s, x_t):
@@ -200,7 +200,7 @@ class DenseUNet(nn.Module):
         logits_s = self.s_outc(self.x_s) # num_classes x 512 x 512
 
         # target domain
-        self.x1_ts = self.s_inc(x_t)
+        self.x1_ts = self.s_inc(x_t) # 64 x 128 x 128
         self.x2_ts = self.s_denseblock_1(self.x1_ts)
         self.x2_ts = self.s_transition_1(self.x2_ts) # 128 x 64 x 64
         self.x3_ts = self.s_denseblock_2(self.x2_ts)
